@@ -1,5 +1,5 @@
-﻿// ButtonLayer.tjs - ボタンレイヤ
-// Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+// ButtonLayer.tjs - ボタンレイヤ
+// Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
 
 /*
 ボタンとして動作するレイヤです。
@@ -78,7 +78,7 @@ class ButtonLayer extends KAGLayer
 
 			// 枠とキャプションを描画
 			// クリア
-			face = dfBoth;
+			face = dfAlpha;
 			colorRect(0, 0, width, height, 0, -255);
 			// 下地を塗る
 			if(Butt_color != clNone)
@@ -140,6 +140,14 @@ class ButtonLayer extends KAGLayer
 		update();
 	}
 
+	function onExecute(x, y, button, shift)
+	{
+		// マウスボタンが押されて、放されたときに呼ばれる
+		// 何かこのボタンが押されたことによりコマンドなどを実装したい場合は
+		// onMouseUp や onClick をオーバーライドするよりも
+		// このメソッドをオーバーライドすることを推奨する
+	}
+
 	function onMouseDown()
 	{
 		// onMouseDown イベントハンドラ
@@ -152,6 +160,7 @@ class ButtonLayer extends KAGLayer
 	function onMouseUp()
 	{
 		// onMouseUp イベントハンドラ
+		if(Butt_mouseDown) onExecute(...);
 		Butt_mouseDown = false;
 		update();
 		super.onMouseUp(...);

@@ -1,5 +1,5 @@
-﻿//;# MessageLayer.tjs - メッセージレイヤ
-//;# Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+//;# MessageLayer.tjs - メッセージレイヤ
+//;# Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
 //;<<'END_OF_TJS_SCRIPT';
 
 // このスクリプトは有効な perl5 スクリプトでもあって、
@@ -35,21 +35,22 @@ class LinkButtonLayer extends ButtonLayer
 		super.onClick(...);
 	}
 
-	function onMouseUp(x, y, button, shift)
+	function onExecute(x, y, button, shift)
 	{
-		if(enabled && button == mbLeft) parent.onButtonClick(linkNum);
-		super.onMouseUp(...);
+		if(enabled && button == mbLeft && !parent.selProcessLock) parent.onButtonClick(linkNum);
+		if(this isvalid) super.onExecute(...);
 	}
 
 	function onMouseEnter()
 	{
-		if(onenter !== void) onenter!;
+		parent.keyLink = linkNum;
+		if(!parent.selProcessLock && onenter !== void) Scripts.eval(onenter);
 		super.onMouseEnter(...);
 	}
 
 	function onMouseLeave()
 	{
-		if(onleave !== void) onleave!;
+		if(!parent.selProcessLock && onleave !== void) Scripts.eval(onleave);
 		super.onMouseLeave(...);
 	}
 
@@ -71,7 +72,10 @@ class LinkButtonLayer extends ButtonLayer
 			if(_eventTransparent != x)
 			{
 				_eventTransparent = x;
-				hitThreshold = x ? 256: 0;
+				hitType = x ? htProvince : htMask; 
+					// ボタン画像は領域画像は持っていないので
+					// hitType を htProvince にすると必ず
+					// マウスイベントを透過するようになる
 			}
 		}
 		getter()
@@ -141,7 +145,7 @@ class LinkCheckBoxLayer extends CheckBoxLayer
 	function commit()
 	{
 		kag.inputTemp = checked;
-		("(" + exp + ") = kag.inputTemp")!;
+		Scripts.eval(("(" + exp + ") = kag.inputTemp"));
 	}
 }
 
@@ -203,7 +207,7 @@ class LinkEditLayer extends EditLayer
 	function commit()
 	{
 		kag.inputTemp = text;
-		("(" + exp + ") = kag.inputTemp")!;
+		Scripts.eval(("(" + exp + ") = kag.inputTemp"));
 	}
 }
 
@@ -227,6 +231,7 @@ class MessageLayer extends KAGLayer
 	// perl スクリプトとしてこのスクリプトを実行する必要があります。
 	// ( 末端の perl スクリプトで処理 )
 
+	var layerType = ltAddAlpha; // レイヤタイプ
 	/*CS*/var frameGraphic = ""; // フレーム画像ファイル名
 	/*CS*/var frameKey = clNone; // フレーム画像キー
 	/*CS*/var frameColor = 0x000000; // フレームの色
@@ -284,7 +289,7 @@ class MessageLayer extends KAGLayer
 	/*C*/var bold; // ボールドで描画するか
 	/*CS*/var defaultFace = "user"; // デフォルトのフォント
 	/*C*/var userFace = "ＭＳ Ｐ明朝"; // ユーザの選んだフォント
-	/*C*/var face; // フォント
+	/*C*/var fontFace; // フォント
 	/*CS*/var defaultChColor = 0xffffff; // デフォルトの文字色
 	/*C*/var chColor; // 文字色
 	/*C*/var defaultAntialiased = true; // デフォルトでアンチエイリアスを掛けるか
@@ -295,6 +300,8 @@ class MessageLayer extends KAGLayer
 
 	/*CS*/var edgeExtent = 1; // 袋文字のふとさ
 	/*CS*/var edgeEmphasis = 512; // 袋文字の強調度
+	/*CS*/var shadowOffsetX = 2; // 影のオフセット
+	/*CS*/var shadowOffsetY = 2; // 影のオフセット
 
 	/*C*/var sizeChanged = false; // フォントサイズが変更されると true
 
@@ -342,6 +349,132 @@ class MessageLayer extends KAGLayer
 	var ltEdit = 3;
 	var ltCheckBox = 4;
 
+    // タイムアウト処理用
+    var timeoutTimer;
+    var timeoutTime;
+    var timeoutStorage;
+    var timeoutTarget;
+    var timeoutExp;
+    
+    function clearTimeout() {
+        stopTimeout();
+        timeoutTime    = void;
+        timeoutStorage = void;
+        timeoutTarget  = void;
+        timeoutExp     = void;
+    }
+
+    function timeoutHandler() {
+        if (!selProcessLock) {
+            Scripts.eval(timeoutExp) if timeoutExp != '';
+            if (timeoutStorage != '' || timeoutTarget != '') {
+                window.lockMessageLayerSelProcess(); // 選択をロック
+                window.process(timeoutStorage, timeoutTarget);
+                clearTimeout();
+            }
+        }
+    }
+
+    function addTimeout(elm) {
+        timeoutTime    = elm.time;
+        timeoutStorage = elm.storage;
+        timeoutTarget  = elm.target;
+        timeoutExp = createSoundExpression(elm.exp, elm.se, elm.sebuf);
+        setSelProcessLock(false); // 選択ロック解除
+        //comp.setSelProcessLock(false); // 選択ロック解除
+    }
+
+    function stopTimeout() {
+        if (timeoutTimer !== void) {
+            invalidate timeoutTimer;
+            timeoutTimer = void;
+        }
+    }
+    
+    function startTimeout() {
+        if (timeoutTime > 0 && (timeoutStorage !== void || timeoutTarget !== void || timeoutExp !== void)) {
+            timeoutTimer = new Timer(timeoutHandler, '');
+            timeoutTimer.capacity = 1;
+            timeoutTimer.interval = timeoutTime;
+            timeoutTimer.enabled  = true;
+        }
+    }
+
+    var clickExp;
+    var clickStorage;
+    var clickTarget;
+
+    function clearClick() {
+        clickStorage = void;
+        clickTarget  = void;
+        clickExp     = void;
+    }
+
+    function addClick(elm) {
+        clickStorage = elm.storage;
+        clickTarget  = elm.target;
+        clickExp = createSoundExpression(elm.exp, elm.se, elm.sebuf);
+        focusable = true; // フォーカスを受け取れるように
+        setSelProcessLock(false); // 選択ロック解除
+        //comp.setSelProcessLock(false); // 選択ロック解除
+        selClickLock = false;
+    }
+
+    function hasClick() {
+        return clickExp !== void || clickStorage !== void || clickTarget !== void;
+    }
+    
+    function processClick() {
+        Scripts.eval(clickExp) if clickExp != '';
+        if(clickStorage != '' || clickTarget != '') {
+            window.lockMessageLayerSelProcess(); // 選択をロック
+            if (window.getKeyState(VK_RETURN) || window.getKeyState(VK_SPACE) || window.getKeyState(VK_CONTROL))
+                window.hideMouseCursor();
+            // キーボードによる操作の場合はマウスカーソルを隠す
+            window.process(clickStorage, clickTarget);
+            clearClick();
+        }
+        selClickLock = false;
+    }
+    
+    var wheelExp;
+    var wheelFunc;
+    var wheelStorage;
+    var wheelTarget;
+
+    function clearWheel() {
+        wheelStorage = void;
+        wheelTarget  = void;
+        wheelExp     = void;
+        wheelFunc    = void;
+    }
+
+    function addWheel(elm) {
+        wheelStorage = elm.storage;
+        wheelTarget  = elm.target;
+        wheelFunc    = elm.func;
+        wheelExp = createSoundExpression(elm.exp, elm.se, elm.sebuf);
+        focusable = true; // フォーカスを受け取れるように
+        setSelProcessLock(false); // 選択ロック解除
+        //comp.setSelProcessLock(false); // 選択ロック解除
+    }
+
+    function hasWheel() {
+        return wheelFunc !== void || wheelExp !== void || wheelStorage !== void || wheelTarget !== void;
+    }
+    
+    function processWheel(shift, delta, x, y) {
+        if (!selProcessLock) {
+            Scripts.eval(wheelFunc)(shift, delta, x, y) if wheelFunc != void;
+            Scripts.eval(wheelExp) if wheelExp != '';
+            if(wheelStorage != '' || wheelTarget != '') {
+                window.lockMessageLayerSelProcess(); // 選択をロック
+                window.process(wheelStorage, wheelTarget);
+                clearWheel();
+            }
+        }
+    }
+    
 	function MessageLayer(owner, parent, name, id, do_config)
 	{
 		// MessageLayer コンストラクタ
@@ -352,6 +485,7 @@ class MessageLayer extends KAGLayer
 		// left, top, width, height : 初期位置
 		// do_config : コンフィギュレーションを行うか
 		super.KAGLayer(...);
+
 
 		this.id = id;
 		this.name = name;
@@ -382,6 +516,9 @@ class MessageLayer extends KAGLayer
 		// config 用一時変数の消去
 		delete ml; delete mt; delete mw; delete mh;
 
+		// レイヤタイプの設定
+		type = layerType;
+
 		// 当たり判定初期化
 		hitType = htMask;
 		hitThreshold = 0; // マウスメッセージは全域不透過
@@ -390,10 +527,14 @@ class MessageLayer extends KAGLayer
 		lineLayer = new global.KAGLayer(window, this);
 		lineLayer.hitType = htMask;
 		lineLayer.hitThreshold = 256; // マウスメッセージは全域透過
+		lineLayer.face = dfAuto;
+		lineLayer.type = layerType;
 		lineLayer.name = "行描画用浮遊メッセージレイヤ";
 
 		// リンクをハイライト表示するためのレイヤ
 		highlightLayer = new global.KAGLayer(window, this);
+		highlightLayer.type = layerType;
+		highlightLayer.face = dfAuto;
 		highlightLayer.hitType = htProvince;
 			// 領域画像で当たり判定を行う
 	}
@@ -423,8 +564,18 @@ class MessageLayer extends KAGLayer
 			if(frameGraphic == "")
 			{
 				// フレーム画像が指定されていない場合
-				face = dfBoth;
-				fillRect(0, 0, imageWidth, imageHeight, (frameOpacity << 24) + frameColor);
+				face = dfAuto;
+				if(type == ltAddAlpha)
+				{
+					fillRect(0, 0, imageWidth, imageHeight, (frameOpacity << 24) +
+						((int)((((frameColor&0xff0000)>>16) * frameOpacity) / 255)<<16 ) +
+						((int)((((frameColor&0x00ff00)>> 8) * frameOpacity) / 255)<< 8 ) +
+						((int)((((frameColor&0x0000ff)    ) * frameOpacity) / 255)     ) );
+				}
+				else
+				{
+					fillRect(0, 0, imageWidth, imageHeight, (frameOpacity << 24) + frameColor);
+				}
 			}
 			else
 			{
@@ -434,7 +585,7 @@ class MessageLayer extends KAGLayer
 
 			face = dfProvince;
 			colorRect(0, 0, imageWidth, imageHeight, 0); // 領域もクリア
-			face = dfBoth;
+			face = dfAuto;
 		}
 
 		imageModified = false;
@@ -480,6 +631,7 @@ class MessageLayer extends KAGLayer
 		marginB = +elm.marginb if elm.marginb !== void;
 		vertical = +elm.vertical if elm.vertical !== void;
 		draggable = +elm.draggable if elm.draggable !== void;
+		visible = +elm.visible if elm.visible !== void;
 
 		clear();
 	}
@@ -508,6 +660,10 @@ class MessageLayer extends KAGLayer
 		decideSizeChange();
 		initLineLayer();
 		currentRuby = "";
+
+        clearTimeout();
+        clearClick();
+        clearWheel();
 	}
 
 	function clear2()
@@ -541,12 +697,12 @@ class MessageLayer extends KAGLayer
 		// 各デフォルトの設定を書き戻し
 		if(!vertical)
 		{
-			lineLayer.font.face = face = defaultFace == 'user' ? userFace : defaultFace;
+			lineLayer.font.face = fontFace = defaultFace == 'user' ? userFace : defaultFace;
 			lineLayer.font.angle = 0;
 		}
 		else
 		{
-			lineLayer.font.face = '@' + (face = defaultFace == 'user' ? userFace : defaultFace);
+			lineLayer.font.face = '@' + (fontFace = defaultFace == 'user' ? userFace : defaultFace);
 			lineLayer.font.angle = 2700;
 		}
 
@@ -581,17 +737,17 @@ class MessageLayer extends KAGLayer
 			if(elmface == 'default')
 			{
 				lineLayer.font.angle = 0;
-				lineLayer.font.face = face =  defaultFace;
+				lineLayer.font.face = fontFace =  defaultFace;
 			}
 			else if(elmface == 'user')
 			{
 				lineLayer.font.angle = 0;
-				lineLayer.font.face = face = userFace;
+				lineLayer.font.face = fontFace = userFace;
 			}
 			else if(elmface !== void)
 			{
 				lineLayer.font.angle = 0;
-				lineLayer.font.face = face = elmface;
+				lineLayer.font.face = fontFace = elmface;
 			}
 		}
 		else
@@ -599,19 +755,19 @@ class MessageLayer extends KAGLayer
 			var elmface = elm.face;
 			if(elmface == 'default')
 			{
-				var f = '@' + (face = defaultFace);
+				var f = '@' + (fontFace = defaultFace);
 				lineLayer.font.angle = 2700;
 				lineLayer.font.face = f;
 			}
 			else if(elmface == 'user')
 			{
-				var f = '@' + (face = userFace);
+				var f = '@' + (fontFace = userFace);
 				lineLayer.font.angle = 2700;
 				lineLayer.font.face = f;
 			}
 			else if(elmface !== void)
 			{
-				var f = '@' + (face = elmface);
+				var f = '@' + (fontFace = elmface);
 				lineLayer.font.angle = 2700;
 				lineLayer.font.face = f;
 			}
@@ -811,14 +967,14 @@ class MessageLayer extends KAGLayer
 		lineLayerLength = 0;
 		lineLayerPos = 4;
 		ll.visible = false;
-		ll.face = dfBoth;
+		ll.face = dfAuto;
 		var lliw = ll.imageWidth;
 		var llih = ll.imageHeight;
 		ll.fillRect(0, 0, lliw, llih, 0);
 			// 完全透明に
 		ll.face = dfProvince;
 		ll.fillRect(0, 0, lliw, llih, 0);
-		ll.face = dfBoth;
+		ll.face = dfAuto;
 			// 領域をクリア
 	}
 
@@ -831,8 +987,8 @@ class MessageLayer extends KAGLayer
 		var llox = lineLayerOriginX + getLineLayerLeftOffset();
 		var lloy = lineLayerOriginY + getLineLayerTopOffset();
 
-		face = dfBoth;
-		pileRect(
+		face = dfAuto;
+		operateRect(
 			llox,
 			lloy,
 			ll, 0, 0, ll.imageWidth, ll.imageHeight);
@@ -893,16 +1049,16 @@ class MessageLayer extends KAGLayer
 				if(!forceresize)
 				{
 					var d = lineLayer.imageHeight - oldsize;
-					lineLayer.face = dfBoth;
+					lineLayer.face = dfAuto;
 					lineLayer.copyRect(0, d, lineLayer,
 						0, 0, lineLayer.imageWidth, oldsize);
-					lineLayer.colorRect(0, 0, lineLayer.imageWidth, d, 0, -255);
+					lineLayer.fillRect(0, 0, lineLayer.imageWidth, d, 0);
 
 					lineLayer.face = dfProvince;
 					lineLayer.copyRect(0, d, lineLayer,
 						0, 0, lineLayer.imageWidth, oldsize);
 					lineLayer.colorRect(0, 0, lineLayer.imageWidth, d, 0);
-					lineLayer.face = dfBoth;
+					lineLayer.face = dfAuto;
 				}
 				var i;
 				for(i = 0; i<lineLayerLinks.count; i++)
@@ -931,7 +1087,7 @@ class MessageLayer extends KAGLayer
 				// 内容移動
 				if(!forceresize)
 				{
-					lineLayer.face = dfBoth;
+					lineLayer.face = dfAuto;
 					// oldbaseline , lineLayerBase を使って
 					// 表示内容を移動
 					lineLayer.copyRect(
@@ -939,12 +1095,12 @@ class MessageLayer extends KAGLayer
 						lineLayer,
 						0,0,lineLayer.imageWidth, lineLayer.imageHeight);
 					// 左端と右端を消去
-					lineLayer.colorRect(0, 0,
-						lineLayerBase - oldbase, lineLayer.imageHeight, 0, -255);
-					lineLayer.colorRect(
+					lineLayer.fillRect(0, 0,
+						lineLayerBase - oldbase, lineLayer.imageHeight, 0);
+					lineLayer.fillRect(
 						lineLayerBase - oldbase+oldsize, 0,
 						lineLayer.imageWidth - (lineLayerBase - oldbase + oldsize),
-						lineLayer.imageHeight, 0, -255);
+						lineLayer.imageHeight, 0);
 
 					lineLayer.face = dfProvince;
 					lineLayer.copyRect(
@@ -957,7 +1113,7 @@ class MessageLayer extends KAGLayer
 						lineLayerBase - oldbase+oldsize, 0,
 						lineLayer.imageWidth - (lineLayerBase - oldbase + oldsize),
 						lineLayer.imageHeight, 0);
-					lineLayer.face = dfBoth;
+					lineLayer.face = dfAuto;
 				}
 				var i;
 				for(i = 0; i < lineLayerLinks.count; i++)
@@ -1127,7 +1283,7 @@ class MessageLayer extends KAGLayer
 		if(edge)
 			ll.drawText(dx, dy, ch, chColor, 255, antialiased, edgeEmphasis, edgeColor, edgeExtent, 0, 0); // 文字
 		else if(shadow)
-			ll.drawText(dx, dy, ch, chColor, 255, antialiased, 255, shadowColor, 0, 2, 2); // 文字
+			ll.drawText(dx, dy, ch, chColor, 255, antialiased, 255, shadowColor, 0, shadowOffsetX, shadowOffsetY); // 文字
 		else
 			ll.drawText(dx, dy, ch, chColor, 255, antialiased); // 文字
 
@@ -1153,7 +1309,7 @@ class MessageLayer extends KAGLayer
 			if(edge)
 				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased, edgeEmphasis, edgeColor, edgeExtent, 0, 0); // 文字
 			else if(shadow)
-				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased, 255, shadowColor, 0, 2, 2); // 文字
+				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased, 255, shadowColor, 0, shadowOffsetX, shadowOffsetY); // 文字
 			else
 				ll.drawText(rx, ry, currentRuby, chColor, 255, antialiased); // 文字
 
@@ -1175,7 +1331,7 @@ class MessageLayer extends KAGLayer
 					fontSize, cw, numLinks + 1);
 
 			// 領域画像も塗りつぶしてやる
-			ll.face = dfBoth;
+			ll.face = dfAuto;
 			linkFilled = true;
 		}
 
@@ -1201,7 +1357,7 @@ class MessageLayer extends KAGLayer
 		var lay = window.temporaryLayer;
 
 		lay.type = ltTransparent;
-		lay.face = dfBoth;
+		lay.face = dfAuto;
 		lay.loadImages(storage, key); // 画像読み込み
 		var lw, lh;
 		lw = lay.imageWidth;
@@ -1252,35 +1408,37 @@ class MessageLayer extends KAGLayer
 
 		if(ischar && (shadow || edge) )
 		{
-			lay.face = dfMain;
+			lay.face = dfOpaque;
+			lay.holdAlpha = true;
 				// 影/袋文字の色でメインを塗りつぶす
 
 			if(edge)
 			{
 				// 袋
 				lay.fillRect(0, 0, lw, lh, edgeColor);
-				lineLayer.pileRect(cx+1, cy, lay, 0, 0, lw, lh);
-				lineLayer.pileRect(cx, cy+1, lay, 0, 0, lw, lh);
-				lineLayer.pileRect(cx-1, cy, lay, 0, 0, lw, lh);
-				lineLayer.pileRect(cx, cy-1, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx+1, cy, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx, cy+1, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx-1, cy, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx, cy-1, lay, 0, 0, lw, lh);
 			}
 			else if(shadow)
 			{
 				// 影
 				lay.fillRect(0, 0, lw, lh, shadowColor);
-				lineLayer.pileRect(cx+2, cy+2, lay, 0, 0, lw, lh);
+				lineLayer.operateRect(cx+2, cy+2, lay, 0, 0, lw, lh);
 			}
 
 		}
 
 		if(ischar)
 		{
-			lay.face = dfMain;
+			lay.face = dfOpaque;
+			lay.holdAlpha = true;
 			lay.fillRect(0, 0, lw, lh, chColor);
 				// メインを文字色で塗りつぶす
 		}
 
-		lineLayer.pileRect(cx, cy, lay, 0, 0, lw, lh); // 描画
+		lineLayer.operateRect(cx, cy, lay, 0, 0, lw, lh); // 描画
 
 		// 描画おわり
 		lastDrawnCh="";
@@ -1295,7 +1453,7 @@ class MessageLayer extends KAGLayer
 			else
 				lineLayer.fillRect(lineLayerPos, lineLayerBase - fontSize,
 					cw, fontSize, numLinks+1);
-			face = dfBoth;
+			face = dfAuto;
 			lineLayer.face = dfBoth;
 			// 領域画像も塗りつぶしてやる
 			linkFilled=true;
@@ -1362,7 +1520,7 @@ class MessageLayer extends KAGLayer
 		if(edge)
 			ll.drawText(dx, dy, text, chColor, 255, antialiased, 512, edgeColor, 1, 0, 0); // 文字
 		else if(shadow)
-			ll.drawText(dx, dy, text, chColor, 255, antialiased, 255, shadowColor, 0, 2, 2); // 文字
+			ll.drawText(dx, dy, text, chColor, 255, antialiased, 255, shadowColor, 0, shadowOffsetX, shadowOffsetY); // 文字
 		else
 			ll.drawText(dx, dy, text, chColor, 255, antialiased); // 文字
 
@@ -1380,8 +1538,8 @@ class MessageLayer extends KAGLayer
 			ll.face = dfProvince;
 			ll.fillRect(lineLayerBase - (fontSize>>1), lineLayerPos,
 				fontSize, cw, numLinks+1);
-			face = dfBoth;
-			ll.face = dfBoth;
+			face = dfAuto;
+			ll.face = dfAuto;
 			linkFilled=true;
 		}
 
@@ -1466,7 +1624,7 @@ class MessageLayer extends KAGLayer
 
 	function createSoundExpression(exp, storage, buf)
 	{
-		// サウンドを慣らすための式を作成する
+		// サウンドを鳴らすための式を作成する
 		// exp になにか式があった場合はカンマでつなぐ
 		// この仕様は後で変更するかも
 		if(storage === void) return exp;
@@ -1514,7 +1672,6 @@ class MessageLayer extends KAGLayer
 		lastMouseY = cursorY;
 		selClickLock = true;
 		setSelProcessLock(false); // 選択ロック解除
-		comp.setSelProcessLock(false); // 選択ロック解除
 	}
 
 	function findLink(x,y)
@@ -1576,12 +1733,12 @@ class MessageLayer extends KAGLayer
 		numLinks++;
 		focusable = true; // フォーカスを受け取れるように
 		setSelProcessLock(false); // 選択ロック解除
-		comp.setSelProcessLock(false); // 選択ロック解除
 	}
 
 	function addEdit(elm)
 	{
 		// 単一行エディットを配置
+		changeLineSize() if sizeChanged;
 		var object = new LinkEditLayer(window, this, vertical);
 		var of = object.font;
 		var lf = lineLayer.font;
@@ -1591,7 +1748,7 @@ class MessageLayer extends KAGLayer
 		of.italic = lf.italic;
 		of.height = lf.height;
 		object.linkNum = numLinks;
-		object.text = elm.name!;
+		object.text = Scripts.eval(elm.name);
 		object.exp = elm.name;
 		object.antialiased = antialiased;
 		object.color = elm.bgcolor if elm.bgcolor !== void; // color でない事に注意
@@ -1623,7 +1780,7 @@ class MessageLayer extends KAGLayer
 		links[numLinks] = %[
 			type :			ltEdit,
 			exp :			elm.name,
-			object : 		object,
+			object :		object,
 			x :				[object.left],
 			y :				[object.top],
 			w :				[object.width],
@@ -1635,7 +1792,6 @@ class MessageLayer extends KAGLayer
 		numLinks ++;
 		focusable = true;
 		setSelProcessLock(false); // 選択ロック解除
-		comp.setSelProcessLock(false); // 選択ロック解除
 	}
 
 	function addCheckBox(elm)
@@ -1643,7 +1799,7 @@ class MessageLayer extends KAGLayer
 		var object = new LinkCheckBoxLayer(window, this, vertical);
 		object.linkNum = numLinks;
 		object.vertical = vertical;
-		object.checked = elm.name!;
+		object.checked = Scripts.eval(elm.name);
 		object.exp = elm.name;
 		object.color = elm.bgcolor if elm.bgcolor !== void; // color でない事に注意
 		object.glyphColor = elm.color if elm.color !== void; // glyphColor でないことに注意
@@ -1689,7 +1845,7 @@ class MessageLayer extends KAGLayer
 		links[numLinks] = %[
 			type :			ltCheckBox,
 			exp :			elm.name,
-			object : 		object,
+			object :		object,
 			x :				[object.left],
 			y :				[object.top],
 			w :				[object.width],
@@ -1701,7 +1857,6 @@ class MessageLayer extends KAGLayer
 		numLinks ++;
 		focusable = true;
 		setSelProcessLock(false); // 選択ロック解除
-		comp.setSelProcessLock(false); // 選択ロック解除
 	}
 
 	function highlightLink(n, b = false)
@@ -1719,7 +1874,7 @@ class MessageLayer extends KAGLayer
 			var xofs = lineLayerOriginX + getLineLayerLeftOffset();
 			var yofs = lineLayerOriginY + getLineLayerTopOffset();
 
-			if(linkn.onenter != '') linkn.onenter!;
+			if(linkn.onenter != '') Scripts.eval(linkn.onenter);
 
 			// ハイライトする
 			if(!vertical)
@@ -1773,14 +1928,14 @@ class MessageLayer extends KAGLayer
 				highlightLayer.setSizeToImageSize();
 			}
 
-			highlightLayer.colorRect(0, 0,
+			highlightLayer.fillRect(0, 0,
 				highlightLayer.imageWidth,
-				highlightLayer.imageHeight, 0, -255);
+				highlightLayer.imageHeight, 0);
 			highlightLayer.face = dfProvince;
-			highlightLayer.colorRect(0, 0,
+			highlightLayer.fillRect(0, 0,
 				highlightLayer.imageWidth,
-				highlightLayer.imageHeight, 0, 255);
-			highlightLayer.face = dfBoth;
+				highlightLayer.imageHeight, 0);
+			highlightLayer.face = dfAuto;
 
 			var i;
 			for(i = 0; i < linkn.lineCount; i++)
@@ -1819,7 +1974,7 @@ class MessageLayer extends KAGLayer
 			{
 				if(links[n] !== void && links[n].type == ltNormal)
 				{
-					if(links[n].onleave != '') links[n].onleave!;
+					if(links[n].onleave != '') Scripts.eval(links[n].onleave);
 				}
 			}
 
@@ -1835,6 +1990,9 @@ class MessageLayer extends KAGLayer
 
 	function processLink(n)
 	{
+        // タイムアウト処理は停止
+        stopTimeout();
+
 		// リンク番号 n を処理する
 		var ln = links[n];
 		if(ln === void) return;
@@ -1843,12 +2001,12 @@ class MessageLayer extends KAGLayer
 		if(comp !== void) comp.highlightLayer.visible = false;
 
 		// 実行
-		ln.exp! if ln.exp != '';
+		Scripts.eval(ln.exp) if ln.exp != '';
 
 		if(ln.storage != '' || ln.target != '')
 		{
 			window.lockMessageLayerSelProcess(); // 選択をロック
-			if(System.getKeyState(VK_RETURN) || System.getKeyState(VK_SPACE))
+			if(window.getKeyState(VK_RETURN) || window.getKeyState(VK_SPACE))
 				window.hideMouseCursor();
 					// キーボードによる操作の場合はマウスカーソルを隠す
 			window.process(ln.storage, ln.target, ln.countPage);
@@ -1879,6 +2037,13 @@ class MessageLayer extends KAGLayer
 				else if(type == ltEdit || type == ltCheckBox) item.object.enabled = !b;
 			}
 		}
+        if (selProcessLock) {
+            focusable = false;
+        } else {
+            if (numLinks > 0 || hasWheel() || hasClick()) {
+                focusable = true;
+            }
+        }
 	}
 
 	function storeSelProcessLock()
@@ -1921,7 +2086,7 @@ class MessageLayer extends KAGLayer
 	function internalHitTest(x, y)
 	{
 		// onHitTest イベントハンドラ(内部関数)
-
+ 
 		if(isDragPos(x, y))
 		{
 			cursor = window.cursorDraggable;
@@ -1947,7 +2112,7 @@ class MessageLayer extends KAGLayer
 		n = findLink(x, y);
 		if(n == -1)
 		{
-			return false; // とりあえず透過
+			return hasClick(); // クリック処理がなければ透過
 		}
 		else
 		{
@@ -1976,6 +2141,9 @@ class MessageLayer extends KAGLayer
 				{
 					processLink(n);
 					return;
+                } else if (hasClick()) {
+                    processClick();
+                    return;
 				}
 			}
 		}
@@ -2054,6 +2222,7 @@ class MessageLayer extends KAGLayer
 				highlightLink(n, true);
 			}
 			lastLink = n;
+			keyLink = lastLink;
 		}
 	}
 	
@@ -2119,7 +2288,7 @@ class MessageLayer extends KAGLayer
 
 		// キーボードで操作が行われた場合にのみカーソルを
 		// 移動させるため、該当するキーが押されているかチェックを行う
-		var sgks = System.getKeyState;
+		var sgks = window.getKeyState;
 		var process = force || sgks(VK_LEFT) || sgks(VK_UP) || sgks(VK_RIGHT) ||
 			sgks(VK_DOWN) || sgks(VK_TAB);
 		if(process)
@@ -2127,7 +2296,6 @@ class MessageLayer extends KAGLayer
 			selClickLock = false;
 			cursorX = x;
 			cursorY = y;
-			internalMouseMove(x, y);
 			if(force) keyLink = n; // 一応再設定
 		}
 		if(linkn.type == ltEdit || linkn.type == ltCheckBox)
@@ -2145,7 +2313,7 @@ class MessageLayer extends KAGLayer
 		// キーが押された
 		if(window.preProcessKeys(key, shift)) return;
 
-		if(!focusable || !numLinks) { return super.onKeyDown(...); }
+		if(!focusable || (!numLinks && !hasClick())) { return super.onKeyDown(...); }
 
 		var l, r;
 		if(vertical)
@@ -2194,9 +2362,13 @@ class MessageLayer extends KAGLayer
 		}
 		else if(key == VK_SPACE || key == VK_RETURN)
 		{
-			if(selProcessLock || keyLink == -1)
-				window.checkProceedingKey(key, shift);
-			else
+			if(selProcessLock || keyLink == -1) {
+                if (hasClick()) {
+                    processClick();
+				} else {
+					window.checkProceedingKey(key, shift);
+				}
+			} else
 				processLink(keyLink);
 		}
 		else
@@ -2224,7 +2396,7 @@ class MessageLayer extends KAGLayer
 		{
 			// キーボードで操作が行われた場合にのみカーソルを
 			// 移動させるため、該当するキーが押されているかチェックを行う
-			var sgks = System.getKeyState;
+			var sgks = window.getKeyState;
 			var process = sgks(VK_LEFT) || sgks(VK_UP) || sgks(VK_RIGHT) ||
 				sgks(VK_DOWN) || sgks(VK_TAB);
 
@@ -2565,7 +2737,7 @@ class MessageLayer extends KAGLayer
 		bold = src.bold;
 		defaultFace = src.defaultFace;
 		userFace = src.userFace;
-		face = src.face;
+		fontFace = src.fontFace;
 		defaultChColor = src.defaultChColor;
 		chColor = src.chColor;
 		defaultAntialiased = src.defaultAntialiased;
@@ -2575,6 +2747,8 @@ class MessageLayer extends KAGLayer
 		lastDrawnCh = src.lastDrawnCh;
 		edgeExtent = src.edgeExtent;
 		edgeEmphasis = src.edgeEmphasis;
+		shadowOffsetX = src.shadowOffsetX;
+		shadowOffsetY = src.shadowOffsetY;
 		sizeChanged = src.sizeChanged;
 		nextClearFlag = src.nextClearFlag;
 		lineLayerBase = src.lineLayerBase;
@@ -2638,6 +2812,8 @@ class MessageLayer extends KAGLayer
 		dic.vertical = vertical;
 		dic.edgeExtent = edgeExtent;
 		dic.edgeEmphasis = edgeEmphasis;
+		dic.shadowOffsetX = shadowOffsetX;
+		dic.shadowOffsetY = shadowOffsetY;
 		dic.defaultAutoReturn = defaultAutoReturn;
 		dic.lineBreakGlyph = lineBreakGlyph;
 		dic.lineBreakGlyphKey = lineBreakGlyphKey;
@@ -2685,6 +2861,8 @@ class MessageLayer extends KAGLayer
 		vertical = dic.vertical if dic.vertical !== void;
 		edgeExtent = dic.edgeExtent if dic.edgeExtent !== void;
 		edgeEmphasis = dic.edgeEmphasis if dic.edgeEmphasis !== void;
+		shadowOffsetX = dic.shadowOffsetX if dic.shadowOffsetX !== void;
+		shadowOffsetY = dic.shadowOffsetY if dic.shadowOffsetY !== void;
 		defaultAutoReturn = dic.defaultAutoReturn if dic.defaultAutoReturn !== void;
 		lineBreakGlyph = dic.lineBreakGlyph if dic.lineBreakGlyph !== void;
 		lineBreakGlyphKey = dic.lineBreakGlyphKey if dic.lineBreakGlyphKey !== void;

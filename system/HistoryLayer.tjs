@@ -1,5 +1,5 @@
-﻿// HistoryLayer.tjs - メッセージ履歴レイヤ
-// Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+// HistoryLayer.tjs - メッセージ履歴レイヤ
+// Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
 
 class LButtonLayer extends ButtonLayer
 	// parent に onClick イベントを送るようにしたボタンレイヤ
@@ -20,11 +20,11 @@ class LButtonLayer extends ButtonLayer
 		super.onClick(...);
 	}
 
-	function onMouseUp(x, y, button, shift)
+	function onExecute(x, y, button, shift)
 	{
 		if(enabled && button == mbLeft)
 			parent.onButtonClick(this);
-		super.onMouseUp(...);
+		super.onExecute(...);
 	}
 
 }
@@ -40,6 +40,7 @@ class HistoryLayer extends Layer
 	var everypage = false;	// ページ毎の履歴表示を行なうか
 	var autoReturn = true; // 自動的に改行するかどうか
 	var maxLines = 2000; // 最大保持行数
+
 	var data = []; // 行データ ( リングバッファ )
 	var lineStart = []; // 行表示開始位置 ( リングバッファ )
 	var actionInfo = []; // 履歴クリック情報 ( リングバッファ )
@@ -88,6 +89,8 @@ class HistoryLayer extends Layer
 
 	var lastWheelTick; // 最後にホイールを操作した tick count
 
+	var storeState = false; // 状態を栞に保存するか
+
 	//	禁則文字
 	var wwFollowing = "%),:;]}｡｣ﾞﾟ。，、．：；゛゜ヽヾゝ"
                 "ゞ々’”）〕］｝〉》」』】°′″℃¢％‰"; // 行頭禁則文字
@@ -120,7 +123,7 @@ class HistoryLayer extends Layer
 		}
 		else
 		{
-        	font.angle = 0;
+			font.angle = 0;
 			font.face = fontName;
 		}
 
@@ -169,6 +172,55 @@ class HistoryLayer extends Layer
 
 		lastHighlightedActionID = 0;
 
+		calcRelinePos();
+	}
+
+	function save() {
+		// 履歴の栞への保存のコードは ゆん氏からいただきました。
+		// この場を借りてお礼申し上げます。
+		if(!storeState) return void;
+		var dic = %[];
+		if(everypage)
+		{
+			dic.lineStart = lineStart;
+			dic.actionInfo = actionInfo;
+			dic.data = data;
+		}
+		else
+		{
+			(dic.lineStart = []).assignStruct(lineStart);
+			(dic.actionInfo = []).assignStruct(actionInfo);
+			(dic.data = []).assignStruct(data);
+		}
+		dic.dataStart = dataStart;
+		dic.dataPos = dataPos;
+		dic.dataPages = dataPages;
+		dic.dataPage = dataPage;
+		dic.dataLines = dataLines;
+		dic.currentLine = currentLine;
+		dic.currentAction = currentAction;
+		dic.currentActionExp = currentActionExp;
+		dic.currentActionID = currentActionID;
+		dic.lastHighlightedActionID = lastHighlightedActionID;
+		return dic;
+	}
+
+	function load(dic) {
+		if(!storeState) return;
+		if(dic === void) return;
+		lineStart.assignStruct(dic.lineStart);
+		actionInfo.assignStruct(dic.actionInfo);
+		data.assignStruct(dic.data);
+		dataStart = dic.dataStart;
+		dataPos = dic.dataPos;
+		dataPages = dic.dataPages;
+		dataPage = dic.dataPage;
+		dataLines = dic.dataLines;
+		currentLine = dic.currentLine;
+		currentAction = dic.currentAction;
+		currentActionExp = dic.currentActionExp;
+		currentActionID = dic.currentActionID;
+		lastHighlightedActionID = dic.lastHighlightedActionID;
 		calcRelinePos();
 	}
 
@@ -394,7 +446,7 @@ class HistoryLayer extends Layer
 			if((len = font.getTextWidth(currentLine += ch)) >= relinePos)
 			{
 				var curlen = currentLine.length;
-				var lastch = curlen >= 1 ? currentLine[curlen - 1] : '';
+				var lastch = curlen >= 2 ? currentLine[curlen - 2] : '';
 
 				if(((lastch=='' || wwLeading.indexOf(lastch)==-1) &&
 					wwFollowing.indexOf(ch)==-1) ||
@@ -421,7 +473,8 @@ class HistoryLayer extends Layer
 	{
 		//	改ページ
 		if(!everypage) return;
-		if(dataPos ==0) return; // 何もデータが入ってない場合は改ページしない
+
+		if(dataPos == 0 && currentLine == "") return; // 何もデータが入っていない場合、なにもしない
 
 		endAction();
 		lastLine	= currentLine;
@@ -511,12 +564,12 @@ class HistoryLayer extends Layer
 		// 背景を塗りつぶす
 		if(n === void)
 		{
-			face = dfBoth;
+			face = dfAlpha;
 			fillRect(0, 0, width, height, 0xc8000000);
 		}
 		else
 		{
-			face = dfBoth;
+			face = dfAlpha;
 			if(verticalView)
 				fillRect(width - marginR - (n+1)*lineHeight, controlHeight, lineHeight,
 					height - controlHeight, 0xc8000000);
@@ -874,7 +927,7 @@ class HistoryLayer extends Layer
 			var n = getActionInfoFromPos(x,y);
 			if(n !== void)
 			{
-				n.action!;
+				Scripts.eval(n.action);
 			}
 		}
 		super.onMouseDown(...);
@@ -919,14 +972,14 @@ class HistoryLayer extends Layer
 				else if(key == VK_LEFT || key == VK_PRIOR)
 				{
 					if(everypage)
-						prevPage();
+						nextPage();
 					else
 						scrollUp();
 				}
 				else if(key == VK_RIGHT || key == VK_NEXT)
 				{
 					if(everypage)
-						nextPage();
+						prevPage();
 					else
 						scrollDown();
 				}

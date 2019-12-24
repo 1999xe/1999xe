@@ -1,6 +1,6 @@
-﻿// Config.tjs - KAG 設定
-// Copyright (C) 2001-2003 W.Dee  改変・配布は自由です
-;global.config_version = "3.18 release rev.2"; // この行を消さないでください
+// Config.tjs - KAG 設定
+// Copyright (C) 2001-2007 W.Dee and contributors  改変・配布は自由です
+;global.config_version = "3.32 stable"; // この行を消さないでください
 
 // このファイル内で設定できる項目は、すべて
 // ;設定名 = 値;
@@ -15,6 +15,7 @@
 // ウィンドウのキャプション(タイトル)および
 // タスクバーに表示されるものです。
 ;System.title = "1999ChristmasEve";
+
 
 // ◆ シナリオ解析モード
 // シナリオファイル中の改行に従わせたい場合に false を設定します。
@@ -56,6 +57,7 @@ function KAGWindow_config()
 ;scWidth = 640;
 ;scHeight = 480;
 
+
 // ◆ 読みとり専用モード
 // readOnlyMode = true とすると、ディスクへのいっさいの書き込み動作をしなく
 // なります。CD-ROM 上から実行させるときなどに指定してください。
@@ -77,7 +79,6 @@ function KAGWindow_config()
 ;freeSaveDataMode = false;
 
 
-
 // ◆サムネイルを保存するか
 // false を指定すると、セーブデータの拡張子は .kdt になり、サムネイルは
 // 保存されません。
@@ -87,22 +88,21 @@ function KAGWindow_config()
 ;saveThumbnail = false;
 
 
-// ◆ セーブデータ保存場所
-// ;saveDataLocation = "savedata";
-// のように指定すると、吉里吉里の実行可能ファイルと同じフォルダ以下の
-// savedata フォルダにデータが保存されます。
-// ;saveDataLocation = System.personalPath + "吉里吉里の栞データ";
-// ;saveDataLocation = System.appDataPath + "吉里吉里の栞データ";
-// のように指定すると、ユーザごとのホームディレクトリ以下の
-// "吉里吉里の栞データ" というフォルダのしたに データが保存されます。
-// この場合は、例で示した "吉里吉里の栞データ" の部分は他のゲームなど
-// と重ならない、十分にユニークな名前である必要があります。
-// System.personalPath の場合は通常「マイ ドキュメント」フォルダ、
-// System.appDataPath の場合は Application Data になります。
-// また、フリーセーブモードであってもシステム変数やシステムの設定を
-// 記録するためにこのセーブデータ保存場所の指定は必須です。
-// 詳しくは KAG3 ドキュメントの「セーブデータに関して」を参照してください。
-;saveDataLocation = "savedata";
+// ◆サムネイルの保存サイズ
+// サムネイルの横幅を指定します。saveThumbnail を true に設定しないとこの
+// 設定は意味がありません。
+// 横幅はピクセル単位で指定してください。たて幅は scWidth と scHeight の
+// 比と同じ比で自動的に計算されます。
+;thumbnailWidth = 133;
+
+// ◆サムネイルの保存モード
+// サムネイルの保存モードを指定します。saveThumbnail を true に設定しないとこの
+// 設定は意味がありません。
+// 8 を指定すると 256 色ビットマップで保存されます。
+// 24 を指定すると 24bitフルカラービットマップで保存されます。
+// 256色ビットマップの方がファイルサイズを小さく抑えることができますが、
+// 画質は悪くなります。
+;thumbnailDepth = 8;
 
 
 // ◆ データ名プレフィクス
@@ -129,9 +129,26 @@ function KAGWindow_config()
 
 
 // ◆ 保存モード
-// "c" を指定すると栞が暗号化されます。"" を指定すると栞の暗号化はされませ
-// ん。
+// "c" を指定すると栞が暗号化されます。
+// "z" を指定すると栞が圧縮されます。
+// "c" と "z" を両方指定することは出来ません。栞を圧縮すると
+// 簡単には読めないようなデータになるので、栞の圧縮は暗号化を
+// 兼ねています。
+// "" を指定すると栞の暗号化や圧縮はされません。
 ;saveDataMode = "";
+
+
+// ◆ 栞にマクロの情報を保存するかどうか
+// 栞にマクロの情報を保存するかどうかを指定します。true を指定すると、KAG の
+// マクロの情報は栞に保存され、栞をたどる動作を行うと、栞を保存した状態のマ
+// クロが再現されます。
+// false を指定すると、KAG のマクロの情報は栞に保存されなく、栞をたどる動作
+// を行っても、現在のマクロの情報は変わりません。
+// 特に 毎回マクロ定義を 作品のはじめで行うような用途では、古いマクロの情報
+// が栞の読み込みによって新しいマクロの情報に上書きされてしまうことが開発の
+// 妨げになるため、false を指定した方がよいでしょう。
+;saveMacros = true;
+
 
 
 // ◆ 文字表示スピード (ミリ秒/文字)
@@ -146,6 +163,7 @@ function KAGWindow_config()
 ;autoModePageWaits.medium = 1000; // 「普通」
 ;autoModePageWaits.slower = 1300; // 「やや遅い」
 ;autoModePageWaits.slow = 2000; // 「遅い」
+
 
 // ◆ 自動的に読み進むウェイト [l] ウェイトの設定値 (ミリ秒)
 ;autoModeLineWaits.fast = 180; // 「短い」
@@ -217,11 +235,19 @@ function KAGWindow_config()
 // になります。KAG 2.x 互換にするには true を指定してください。
 ;defaultQuakeTimeInChUnit = false;
 
+
 // ◆ 利用可能な効果音バッファの数
 // 利用可能な効果音バッファの最大値を指定します。つまり、ここで指定した数の
 // 分だけ効果音を同時に再生できます。効果音を使用しない場合は 0 を指定して
 // かまいません。
 ;numSEBuffers = 3;
+
+
+// ◆ ムービーオブジェクトの数
+// 利用可能なムービーオブジェクトの最大値を指定します。つまり、ここで指定し
+// た数の分だけムービーを同時に再生できます。
+;numMovies = 1;
+
 
 // ◆ 初期状態の前景レイヤの数
 // 必要なければ 0 を指定してかまいません。
@@ -229,6 +255,7 @@ function KAGWindow_config()
 // 定しない方が良いでしょう。
 // laycount タグでシナリオ内でも変更できます。
 ;numCharacterLayers = 2;
+
 
 // ◆ 前景レイヤの左右中心位置指定
 // +---------+
@@ -245,6 +272,7 @@ function KAGWindow_config()
 ;scPositionX.right_center = 400;
 ;scPositionX.right = 480;
 
+
 // 簡易な記号
 // ( pos 属性に指定する left, left_center, center, right_center, right を
 //  それぞれ l, lc, c, rc, r でも指定できるように別名を定義します )
@@ -254,16 +282,19 @@ function KAGWindow_config()
 ;scPositionX.rc = scPositionX.right_center;
 ;scPositionX.r = scPositionX.right;
 
+
 // ◆ 初期状態のメッセージレイヤの数
 // 前景レイヤと違って、0 を指定することはできません。これも必要な数だけ確保
 // するようにすべきです。laycount タグでシナリオ内でも変更できます。
 ;numMessageLayers = 2;
+
 
 // ◆ 初期状態でメッセージレイヤを表示するかどうか
 // true を指定するとメッセージレイヤ0が初期状態で表示状態になりますが、
 // false を指定すると初期状態ではすべてのメッセージレイヤは初期状態で非表示
 // になります。
 ;initialMessageLayerVisible = true;
+
 
 // ◆ 利用可能な栞の数
 // メニューに表示し、ユーザーが選択可能な栞の数です。
@@ -273,15 +304,18 @@ function KAGWindow_config()
 // storeMenu.visible を false に設定してください。
 ;numBookMarks = 30;
 
+
 // ◆ 栞に日付を併記するか
 // true に設定すると、栞メニューの項目の横に YY/MM/DD HH:MMの形式で栞を保存
 // した日付・時刻が表示されます。
 ;showBookMarkDate = true;
 
+
 // ◆ フォント選択で固定ピッチフォントのみを表示するか
 // true を指定すると、フォント選択ウィンドウで固定ピッチフォントのみを表示
 // するようになります。
 ;showFixedPitchOnlyInFontSelector = false;
+
 
 // ◆ 「ヘルプ > 目次」を選択したときに実行するファイル
 // ここで指定するファイルは吉里吉里実行可能ファイルと同じ場所に設置されてい
@@ -319,70 +353,91 @@ function Menu_visible_config()
 // メニューに表示するメニュー項目名については Menus.tjs を書き換えてくださ
 // い。
 
+
 // ◆ メニューバーを表示するか
 // 非表示にすると当然どのメニュー項目にもアクセスできなくなります。
 ;menu.visible = true;
+
 
 // ◆ 「システム > メッセージを消す」
 // このメニュー項目を非表示にしてもマウスの右クリックでのメッセージの
 // 非表示は引き続き有効です。
 ;rightClickMenuItem.visible = false;
 
+
 // ◆ 「システム > メッセージ履歴の表示」
 ;showHistoryMenuItem.visible = true;
+
 
 // ◆ 「システム > 次の選択肢/未読まで進む」または「次の選択肢まで進む」
 ;skipToNextStopMenuItem.visible = true;
 
+
 // ◆ 「システム > 自動的に読み進む」
 ;autoModeMenuItem.visible = true;
+
 
 // ◆ 「システム > 自動的に読み進むウェイト」
 ;autoModeWaitMenu.visible = true;
 
+
 // ◆ 「システム > 前に戻る」
 ;goBackMenuItem.visible = true;
+
 
 // ◆ 「システム > 最初に戻る」
 ;goToStartMenuItem.visible = true;
 
+
 // ◆ 「文字表示」
 ;characterMenu.visible = true;
+
 
 // ◆ 「文字表示 > 表示速度 > ページ末まで一気に」
 // ユーザがこのメニュー項目をチェックすると、
 // l タグが無視されるようになります。
 ;chNonStopToPageBreakItem.visible = true;
 
+
 // ◆ 「文字表示 > 一度読んだところは」
 ;ch2ndSpeedMenu.visible = true;
+
 
 // ◆ 「文字表示 > 一度読んだところは > ページ末まで一気に」
 ;ch2ndNonStopToPageBreakItem.visible = true;
 
+
 // ◆ 「文字表示 > アンチエイリアス」
 ;chAntialiasMenuItem.visible = true;
+
 
 // ◆ 「文字表示 > フォント」
 ;chChangeFontMenuItem.visible = false;
 
+
 // ◆ 「栞をたどる」
 ;restoreMenu.visible = true;
+
 
 // ◆ 「栞をはさむ」
 ;storeMenu.visible = true;
 
+
 // ◆ 「画面」
 ;displayMenu.visible = true;
+
 
 // ◆ 「ヘルプ」
 ;helpMenu.visible = false;
 
+
 // ◆ 「ヘルプ > 目次 ...」
-;helpIndexMenuItem.visible = false;
+;helpIndexMenuItem.visible = true;
+
 
 // ◆ 「ヘルプ > このソフトについて ...」
-;helpAboutMenuItem.visible = false;
+;helpAboutMenuItem.visible = true;
+
 
 // ◆ 「デバッグ」
 ;debugMenu.visible = true;
@@ -406,6 +461,17 @@ function Menu_visible_config()
 
 function MessageLayer_config()
 {
+// ◆ メッセージレイヤの表示モード
+// メッセージレイヤをどのモードで表示するかを指定します。
+// ltAddAlpha は KAG3 3.23 beta 5 から指定可能なモードで、
+// ltAlpha よりも処理が若干高速です。
+// ltAlpha はそれ以前の KAG と互換性のあるモードです。
+// ltAddAlpha を指定した場合は、frameGraphic で指定する
+// メッセージ枠用の画像も、ltAddAlpha 用に作成された
+// 画像を用いる必要があります (自動的には判別されません)。
+// ltAddAlpha 用の画像は画像フォーマットコンバータで作成可能です。
+;layerType = ltAddAlpha;
+
 // ◆ メッセージ枠用の画像
 // メッセージ枠用の画像のファイル名を指定します。
 // "" を指定するとメッセージ枠の画像を使用しません。また、メッセージ枠用の
@@ -468,7 +534,7 @@ function MessageLayer_config()
 // ◆ 字間
 // 字間を pixel 単位で指定します。
 // デフォルトは 0 で、正あるいは負のオフセットで指定します。
-// 負の数値を指定すると時間が詰まります。正の数値を指定すると時間が空きま
+// 負の数値を指定すると字間が詰まります。正の数値を指定すると字間が空きま
 // す。
 ;defaultPitch = 0; // defstyle タグの pitch 属性に相当
 
@@ -477,7 +543,8 @@ function MessageLayer_config()
 // デフォルトのフォント名を指定します。
 // この設定はシステム変数に記録されて、次回起動時に引き継がれるので、
 // userFace の設定を変更し、適用したい場合はシステム変数ファイル
-// ?????sc.kdt の "chdefaultFace" => の行を削除してください。
+// ?????sc.* の "chdefaultFace" => の行を削除してください。
+// (あるいはシステム変数ファイルを消してください)
 // カンマで区切って複数のフォントを指定することができます。その場合は、最初
 // の方に書いたフォントが存在すれば、優先されます。
 ;userFace = "ＭＳ ゴシック"; // deffont タグの face 属性に相当
@@ -550,14 +617,11 @@ function MessageLayer_config()
 ;glyphFixedPosition = false;  // glyph タグの fix 属性に相当
 
 
-
 // ◆ クリック待ちグリフを固定した場所に表示するときの位置
 // glyphFixedLeft にはグリフを表示する左端位置を、glyphFixedTop にはグリフ
 // を表示する上端位置を指定してください。
 ;glyphFixedLeft = 0;  // glyph タグの left 属性に相当
 ;glyphFixedTop = 0;  // glyph タグの top 属性に相当
-
-
 
 
 // ◆ リンクの強調色
@@ -573,7 +637,7 @@ function MessageLayer_config()
 // ◆ 縦書きモード
 // メッセージレイヤを標準で縦書きモードにする場合は false ではなく true を
 // 指定してください。
-;vertical = false;  // position タグの vertical 属性に相当
+;vertical = false;
 
 
 // ◆ マウスでドラッグ可能か
@@ -602,25 +666,6 @@ function MessageLayer_config()
 function BGM_config()
 {
 // BGM の設定です。
-// CD-DA, Wave, MIDI のいずれかを BGM として再生することができます。
-
-// ◆ BGM再生メディア
-// type 変数に設定する文字列で、使用するサウンドバッファを決めることができ
-// ます。
-// "Wave"  : WaveSoundBuffer ( wav等(プラグインで再生できる物も含む) )
-// "MIDI"  : MIDISoundBuffer ( mid,smf )
-// "CDDA"  : CDDASoundBuffer ( cda )
-;type = "Wave";
-
-
-// ◆ CDDA再生ボリュームラベル
-// "CDDA" を指定した場合は、cdVolume 変数に、再生する CD のボリュームラベル
-// を指定します。ボリュームシリアル番号ではありません。
-// KAG は、このボリュームラベルを持った CD の挿入された CD-ROM ドライブで
-// CD-DA を再生します。特にマシンに複数のCD-ROMドライブが装着されている場合
-// にこれを元にしてドライブの区別を行います。
-;cdVolume = "xxxx";
-
 
 // ◆ クロスフェードを行うか
 // doubleBuffered 変数には、サウンドバッファを２つ使用するかどうかを指定し
@@ -628,20 +673,7 @@ function BGM_config()
 // 可能になります。
 // MIDI サウンドバッファで複数同時再生を意図していないデータを使う場合や、
 // CDDA サウンドバッファを使う場合は false に指定してください。
-;doubleBuffered = false;
-
-
-// ◆ MIDI 再生開始前に送るメッセージ
-// MIDI データの再生を開始する前に MIDI 音源に送るメッセージです。
-// <% %> を指定すると メッセージは送られません。
-// <% f0 7e 7f 09 01 f7 ff 00 %> は GM System On です。
-// ほかに
-// <% f0 41 10 42 12 40 00 7f 00 41 f7 ff 00 %> GS reset
-// <% f0 43 10 4c 00 00 7e 00 f7 ff 00 %> XG on
-// など。
-// ff 00 を途中に挿入するとその時点で 50ms のウェイトが入ります。
-// 音源初期化などでウェイトが必要な場合に挿入します。
-;midiInitialMessage = <% f0 7e 7f 09 01 f7 ff 00 %>;
+;doubleBuffered = true;
 
 
 // ◆ BGM 追加の設定
@@ -695,6 +727,19 @@ function HistoryLayer_config()
 // ◆ 自動改行を行うかどうか
 ;autoReturn = true;
 
+
+// ◆ 履歴保持最大数
+// 「◆ ページ単位での閲覧を行うかどうか」を true に設定した場合は
+// maxPages をページ単位で、false に設定した場合は maxLines を行単位で
+// 指定してください。
+;maxPages = 100;
+;maxLines = 2000;
+
+
+// ◆ 栞にメッセージ履歴を保存するか
+// true を指定すると栞にメッセージ履歴が保存されるように
+// なりますが、栞のデータサイズが大きくなります。
+;storeState = false;
 
 
 // ◆ メッセージ履歴 追加の設定

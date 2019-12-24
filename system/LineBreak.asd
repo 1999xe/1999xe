@@ -1,4 +1,4 @@
-﻿@loadcell
+@loadcell
 @loop
 ;
 @macro name=copyone

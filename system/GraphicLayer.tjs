@@ -1,5 +1,5 @@
-﻿// GraphicLayer.tjs - グラフィック系レイヤ(背景,キャラクタ)
-// Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+// GraphicLayer.tjs - グラフィック系レイヤ(背景,キャラクタ)
+// Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
 
 class ProvinceContext
 {
@@ -185,7 +185,7 @@ class GraphicLayer extends AnimationLayer
 		body += "}\n";
 
 		provinceActions = [];
-		(body! incontextof this) (); // body のコンパイルをしてこのコンテキスト上で実行
+		(Scripts.eval(body) incontextof this) (); // body のコンパイルをしてこのコンテキスト上で実行
 
 		window.enableMouseKey();
 	}
@@ -254,7 +254,7 @@ class GraphicLayer extends AnimationLayer
 		var action = queryProvinceAction(n);
 		if(action !== void)
 		{
-			if(action.onenter !== void) action.onenter!;
+			if(action.onenter !== void) Scripts.eval(action.onenter);
 			if(action.hint !== void) hint = action.hint;
 			if(action.cursor !== void)
 				cursor = action.cursor; // カーソル指定の方法に注意(&はつけない)
@@ -273,7 +273,7 @@ class GraphicLayer extends AnimationLayer
 	{
 		// 領域番号 n からマウスが離れた
 		var action = queryProvinceAction(n);
-		if(action !== void && action.onleave !== void) action.onleave!;
+		if(action !== void && action.onleave !== void) Scripts.eval(action.onleave);
 		hint = "";
 		showParentHint = true;
 	}
@@ -285,7 +285,7 @@ class GraphicLayer extends AnimationLayer
 		var n = window.messageLayerHiding ? 0 : getProvincePixel(x - imageLeft, y - imageTop);
 		var action = queryProvinceAction(n);
 		if(action === void) return false;
-		if(action.exp !== void) action.exp!;
+		if(action.exp !== void) Scripts.eval(action.exp);
 		if(action.storage != '' || action.target != '')
 		{
 			var q = queryProvinceAction(0, false);
@@ -356,7 +356,8 @@ class BaseLayer extends GraphicLayer
 		// loadImages オーバーライド
 		if(elm !== void)
 		{
-			elm.mode = "rect"; // レイヤモードを変えられると困るので
+			elm.mode = "opaque"; // レイヤモードを変えられると困るので
+			delete elm.index; // インデックスを変えられると困るので
 
 			if(elm.visible !== void)
 			{
@@ -409,7 +410,7 @@ class BaseLayer extends GraphicLayer
 	{
 		// マウスが押された
 		super.onMouseDown(...);
-		internalOnMouseDown(x - imageLeft, y - imageTop, button);
+		internalOnMouseDown(x, y, button);
 	}
 
 	function clearImage()
@@ -418,7 +419,7 @@ class BaseLayer extends GraphicLayer
 		super.clearImage(false);
 		setImageSize(window.scWidth, window.scHeight);
 		setSizeToImageSize();
-		face = dfBoth;
+		face = dfAlpha;
 		fillRect(0, 0, imageWidth, imageHeight, 0xff000000);
 	}
 
@@ -473,6 +474,12 @@ class BaseLayer extends GraphicLayer
 		super.exchangeInfo();
 		window.swapBaseLayer();
 	}
+
+    property isPrimary {
+        getter() {
+            return this === window.fore.base;
+        }
+    }
 }
 
 class CharacterLayer extends GraphicLayer
@@ -507,7 +514,7 @@ class CharacterLayer extends GraphicLayer
 		else
 		{
 			// hit==true かつ 領域アクションが定義されている場合
-			super.onHitTest(x, y, true);
+			super.onHitTest(x, y, !window.messageLayerHiding);
 		}
 		return;
 	}
@@ -581,7 +588,7 @@ class CharacterLayer extends GraphicLayer
 		// マウスが押された
 		super.onMouseDown(...);
 		if(button == mbLeft)
-			processProvince(x - imageLeft, y - imageTop);
+			processProvince(x, y);
 		else if(button == mbRight)
 			window.onPrimaryRightClick();
 			// 右ボタンは window.onPrimaryRightClick() を呼ぶ

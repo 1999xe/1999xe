@@ -1,5 +1,14 @@
-﻿// Conductor.tjs - KAG シナリオ進行処理
-// Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+// Conductor.tjs - KAG シナリオ進行処理
+// Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
+
+
+class ConductorException extends Exception
+{
+	// ConductorException - Conductor がタグハンドラを処理中に発生した例外を
+	// 投げる時に使われる例外クラス
+	function ConductorException() { super.Exception(...); }
+	function finalize() { super.finalize(...); }
+};
 
 class BaseConductor extends KAGParser
 {
@@ -8,7 +17,7 @@ class BaseConductor extends KAGParser
 	var oneshot;
 	var _interrupted = false; // 中断中か
 	var timerEnabled = false; // タイマが起動中か
-	var pending; // 後回しにされたタグ
+	var pendings; // 後回しにされたタグ
 	var inProcessing = false; // timerCallback を処理中かどうか
 	var reentered = false; // timerCallback 中に 再入したか
 	var nextTimerTick = 0; // 次にタイマーが発動されるはずの tick
@@ -24,6 +33,8 @@ class BaseConductor extends KAGParser
 		oneshot = new AsyncTrigger(timerCallback, '');
 			// これも同様
 		oneshot.cached = true; // イベントのキャッシュを有効に
+
+		pendings = [];
 	}
 
 	function finalize()
@@ -37,7 +48,7 @@ class BaseConductor extends KAGParser
 	function clear()
 	{
 		// clear オーバーライド
-		pending = void;
+		pendings.clear();
 		super.clear();
 	}
 
@@ -58,16 +69,23 @@ class BaseConductor extends KAGParser
 			inProcessing = true;
 			for(;;)
 			{
-				if(pending !== void)
+				if(pendings.count > 0)
 				{
 					// 後回しにされたタグがある場合
-					obj = pending;
-					pending = void;
+					obj = pendings[0];
+					pendings.erase(0);
 				}
 				else
 				{
 					// 後回しにされたタグがないので次のタグを得る
 					obj = getNextTag(); // 次のタグを得る
+
+					// getNextTag() の中で、pendings に追加された (iscript など)
+					if(pendings.count > 0)
+					{
+						pendings.add(obj);
+						continue;
+					}
 				}
 
 				if(obj === void)
@@ -77,6 +95,7 @@ class BaseConductor extends KAGParser
 					timerEnabled =false;
 					onStop();
 					inProcessing = false;
+					reentered = false;
 					return;
 				}
 				else
@@ -98,30 +117,30 @@ class BaseConductor extends KAGParser
 						switch(step)
 						{
 						case -5: // いったんイベントを処理(現在のタグは後回し)
-							pending = obj;
+							pendings.insert(0, obj);
 							oneshot.mode = atmAtIdle;
 							oneshot.trigger(); // トリガ
 							timer.interval = 0; // タイマは停止
 							inProcessing = false;
-							if(reentered) reentered = false, startProcess(false);
+							reentered = false;
 							return;
 						case -4: // いったんイベントを処理
 							oneshot.mode = atmAtIdle;
 							oneshot.trigger(); // トリガ
 							timer.interval = 0; // タイマは停止
 							inProcessing = false;
-							if(reentered) reentered = false, startProcess(false);
+							reentered = false;
 							return;
 						case -3: // 後回ししてブレーク
-							pending = obj;
+							pendings.insert(0, obj);
 							timer.interval = 0; // タイマは停止
 							inProcessing = false;
-							if(reentered) reentered = false, startProcess(false);
+							reentered = false;
 							return;
 						case -2: // ブレーク
 							timer.interval = 0; // タイマは停止
 							inProcessing = false;
-							if(reentered) reentered = false, startProcess(false);
+							reentered = false;
 							return;
 						case -1: // シナリオ終了
 							timer.interval = 0; 
@@ -129,7 +148,7 @@ class BaseConductor extends KAGParser
 							timerEnabled = false;
 							onStop();
 							inProcessing = false;
-							if(reentered) reentered = false, startProcess(false);
+							reentered = false;
 							return;
 						}
 					}
@@ -142,29 +161,30 @@ class BaseConductor extends KAGParser
 							nextTimerTick = step + System.getTickCount();
 						}
 						inProcessing = false;
-						if(reentered) reentered = false, startProcess(false);
+						reentered = false;
 						return;
 					}
 				}
 			}
 			inProcessing = false;
-			if(reentered) reentered = false, startProcess(false);
+			reentered = false;
 		}
 		catch(e)
 		{
-			Debug.logAsError();
+//			Debug.logAsError();
 			timer.enabled = false;
 			timerEnabled =false;
 			onStop();
 			inProcessing = false;
 			var msg = "エラーが発生しました\n"
-				"ファイル : " + curStorage + "\n"
-				"行 : " + (curLine+1) + "  タグ : " + (obj === void ? "不明" : obj.tagname)
+				"ファイル : " + curStorage + "   行 : " + (curLine+1) + "\n"
+				"タグ : " + (obj === void ? "不明" : obj.tagname)
 				+ " ( ← エラーの発生した前後のタグを示している場合もあります )\n"
 				+ e.message;
 			if((typeof e.trace) != "undefined") dm("trace : " + e.trace);
 			dm(msg);
-			System.inform(msg, "エラー");
+			throw new ConductorException(msg);
+//			System.inform(msg, "エラー");
 		}
 	}
 
@@ -191,8 +211,8 @@ class BaseConductor extends KAGParser
 		// 処理されるため、呼び出し側はこのメソッドの実行が終わったら
 		// すぐに吉里吉里に制御を戻す(すべての関数から抜ける)ようにするべき。
 		resetInterrupt();
-		timerEnabled = true;
 		timer.interval = 0; // 初期インターバル
+		timerEnabled = true;
 		if(!_interrupted)
 		{
 			timer.enabled = true; // タイマー開始
@@ -267,10 +287,10 @@ class BaseConductor extends KAGParser
 		t.enabled = st.enabled;
 		timerEnabled = src.timerEnabled;
 		_interrupted = src._interrupted;
-		if(src.pending !== void)
-			(Dictionary.assign incontextof pending)(src.pending);
+		if(src.pendings.count > 0)
+			pendings.assignStruct(src.pendings);
 		else
-			pending = src.pending;
+			pendings.clear();
 		super.assign(src);
 	}
 
@@ -284,23 +304,27 @@ class BaseConductor extends KAGParser
 	{
 		// restore オーバーライド
 		super.restore(...);
-		pending = void;
+		pendings.clear();
 	}
 
 	function loadScenario()
 	{
 		// loadScenario オーバーライド
-		pending = void;
+		pendings.clear();
 		super.loadScenario(...);
 	}
 
 	function goToLabel()
 	{
 		// goToLabel オーバーライド
-		pending = void;
+		pendings.clear();
 		super.goToLabel(...);
 	}
 
+	function enqueueTag(tag)
+	{
+		pendings.add(tag);
+	}
 }
 
 

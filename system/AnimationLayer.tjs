@@ -1,5 +1,5 @@
-﻿// AnimationLayer.tjs - アニメーションを行うレイヤ
-// Copyright (C)2001-2003, W.Dee  改変・配布は自由です
+// AnimationLayer.tjs - アニメーションを行うレイヤ
+// Copyright (C)2001-2009, W.Dee and contributors  改変・配布は自由です
 
 
 /*
@@ -33,7 +33,7 @@
 
 　ベース画像は image タグで読み込まれます (ここで用いるベースとは、KAGの背
 景レイヤの base とは違う意味です )。セル画像は、アニメーション定義ファイル
-内の loadcell タグで読み込みま。
+内の loadcell タグで読み込みます。
 
 　アニメーション定義ファイルは、ベース画像とファイルが同じで、拡張子が asd
 のテキストファイルです。
@@ -295,7 +295,7 @@ class AnimationConductor extends BaseConductor
 		return func(obj);
 	}
 
-	function onScript(script)
+	function onScript(script, scriptname, lineofs)
 	{
 		// iscript が実行されるとき
 		try
@@ -334,6 +334,7 @@ class AnimationLayer extends KAGLayer
 
 	var Anim_defaultFontInfo = %[];
 
+
 	function AnimationLayer(win, par)
 	{
 		// AnimationLayer コンストラクタ
@@ -365,9 +366,10 @@ class AnimationLayer extends KAGLayer
 			visible = false;
 			setSize(32, 32);
 			setImageSize(32, 32);
-			face = dfBoth;
+			face = dfAlpha;
 			fillRect(0, 0, 32, 32, 0);
-			type = ltCoverRect;
+			type = ltOpaque;
+			face = dfAuto;
 		}
 	}
 
@@ -478,10 +480,14 @@ class AnimationLayer extends KAGLayer
 		Anim_partialImageInfo = void;
 
 		// 画像を読み込む
-		super.loadImages(elm.storage, elm.key);
+		var taginfo = super.loadImages(elm.storage, elm.key);
 
-		// 色補正
-		applyColorCorrection(this, elm);
+		// 画像のタグ情報をデフォルト値として採用
+		if(taginfo)
+		{
+			(Dictionary.assign incontextof taginfo)(elm, false);
+			elm = taginfo;
+		}
 
 		// フリップ
 		var ud, lr;
@@ -527,23 +533,21 @@ class AnimationLayer extends KAGLayer
 
 		// レイヤモード
 		{
-			var mode = ltTransparent;
+			var mode = ltAlpha;
+
 			if(elm.mode !== void)
 			{
-				if(elm.mode == "rect")
-					mode = ltCoverRect;
-				else if(elm.mode == "add")
-					mode = ltAdditive;
-				else if(elm.mode == "sub")
-					mode = ltSubtractive;
-				else if(elm.mode == "mul")
-					mode = ltMultiplicative;
-				else if(elm.mode == "dodge")
-					mode = ltDodge;
+				var layertypeinfo = imageTagLayerType[elm.mode];
+				if(layertypeinfo !== void)
+					mode = layertypeinfo.type;
 			}
 
 			type = mode;
 		}
+
+		// 色補正
+		face = dfAuto;
+		applyColorCorrection(this, elm);
 
 		// 可視不可視、位置、不透明度、インデックス
 		if ( elm !== void && elm.pos !== void ) {
@@ -570,6 +574,17 @@ class AnimationLayer extends KAGLayer
 			// アニメーション情報をデフォルトのコンダクタに読み込む
 			loadAnimInfo(0, ''); // ついでにアニメーション開始(もし開始できれば)
 		}
+	}
+
+	function addPartialImageInfo(elm)
+	{
+		// elm を partialImageInfo に追加する
+		// Anim_partialImageInfo に情報を追加
+		if(Anim_partialImageInfo === void)
+			Anim_partialImageInfo = [];
+		var info = %[];
+		(Dictionary.assign incontextof info)(elm);
+		Anim_partialImageInfo.add(info);
 	}
 
 	function loadPartialImage(elm)
@@ -604,8 +619,30 @@ class AnimationLayer extends KAGLayer
 		var temp = window.temporaryLayer;
 
 		// 一時レイヤに画像を読み込む
-		temp.loadImages(elm.storage, key);
+		var taginfo = temp.loadImages(elm.storage, key);
 
+		// 画像のタグ情報をデフォルト値として採用
+		if(taginfo)
+		{
+			(Dictionary.assign incontextof taginfo)(elm, false);
+			elm = taginfo;
+		}
+
+		// レイヤモード
+		{
+			var mode = ltAlpha;
+
+			if(elm.mode !== void)
+			{
+				var layertypeinfo = imageTagLayerType[elm.mode];
+				if(layertypeinfo !== void)
+					mode = layertypeinfo.type;
+			}
+
+			temp.type = mode;
+		}
+
+		// 画像補整
 		var lr = false, ud = false;
 		if(Anim_loadParams !== void)
 		{
@@ -647,27 +684,41 @@ class AnimationLayer extends KAGLayer
 			sx = temp.imageWidth - sx - sw;
 		}
 
-		if(elm.mode !== void && elm.mode == "copy")
+		if(elm.mode == 'copy' || elm.mode == 'opaque')
 		{
 			// コピー
-			face = dfBoth;
+			face = dfAlpha;
 			copyRect(dx, dy, temp, sx, sy, sw, sh);
 		}
 		else
 		{
 			// 重ね合わせ
-			var orgface = face;
-			face = (type == ltTransparent) ? dfBoth : dfMain;
-			pileRect(dx, dy, temp, sx, sy, sw, sh, elm.opacity === void ? 255 : +elm.opacity);
-			face = orgface;
+			var opa = elm.opacity === void ? 255 : +elm.opacity;
+
+			switch(elm.mode)
+			{
+			case '': // default
+			case 'pile':
+			case 'alpha':
+				holdAlpha = false;
+				face = dfAlpha;
+				break;
+			case 'addalpha':
+				holdAlpha = false;
+				face = dfAddAlpha;
+				break;
+			default:
+				holdAlpha = true;
+				face = dfOpaque;
+				break;
+			}
+			operateRect(dx, dy, temp, sx, sy, sw, sh, omAuto, opa);
+
+			face = dfAuto;
 		}
 
 		// Anim_partialImageInfo に情報を追加
-		if(Anim_partialImageInfo === void)
-			Anim_partialImageInfo = [];
-		var info = %[];
-		(Dictionary.assign incontextof info)(elm);
-		Anim_partialImageInfo.add(info);
+		addPartialImageInfo(elm);
 
 		return 0;
 	}
@@ -709,8 +760,7 @@ class AnimationLayer extends KAGLayer
 		var color = elm.color === void ? 0xffffff : +elm.color;
 		var antialiased = elm.antialiased === void ? true : +elm.antialiased;
 
-		var orgface = face;
-		face = (type == ltTransparent) ? dfBoth : dfMain;
+		face = dfAuto;
 
 		var x = +elm.x;
 		var y = +elm.y;
@@ -730,14 +780,8 @@ class AnimationLayer extends KAGLayer
 			drawText(x, y, elm.text, color, 255, antialiased); // 文字
 		}
 
-		face = orgface;
-
 		// Anim_partialImageInfo に情報を追加
-		if(Anim_partialImageInfo === void)
-			Anim_partialImageInfo = [];
-		var info = %[];
-		(Dictionary.assign incontextof info)(elm);
-		Anim_partialImageInfo.add(info);
+		addPartialImageInfo(elm);
 
 		return 0;
 	}
@@ -745,6 +789,9 @@ class AnimationLayer extends KAGLayer
 	function applyColorCorrection(layer, param)
 	{
 		// layer に対して色補正を行う
+		var orgface = layer.face;
+		var orgholdlpha = layer.holdAlpha;
+		layer.face = dfAuto;
 		if(param.grayscale !== void && +param.grayscale) layer.doGrayScale();
 		layer.adjustGamma(
 			param.rgamma, param.rfloor, param.rceil,
@@ -753,12 +800,36 @@ class AnimationLayer extends KAGLayer
 		if(param.mcolor !== void)
 		{
 			// 色重ね合わせ
-			var orgface = layer.face;
-			layer.face = dfMain;
+			layer.face = dfOpaque;
+			layer.holdAlpha = true;
 			layer.colorRect(0, 0, layer.imageWidth, layer.imageHeight, +param.mcolor,
 				+param.mopacity);
-			layer.face = orgface;
 		}
+		if (param.lightcolor !== void) {
+			// レイヤ合成
+			var mode = ltAlpha;
+			if(param.lighttype !== void)
+			{
+				var layertypeinfo = imageTagLayerType[param.lighttype];
+				if(layertypeinfo !== void)
+					mode = layertypeinfo.type;
+			}
+			layer.holdAlpha = true;
+			layer.fillOperateRect(0,0,layer.imageWidth, layer.imageHeight,
+								  +param.lightcolor,
+								  mode);
+		}
+		if (param.shadow !== void) {
+			// 影つけ
+			var dx = param.shadowx !== void ? +param.shadowx : 10;
+			var dy = param.shadowy !== void ? +param.shadowy : 10;
+			var blur = param.shadowblur !== void ? +param.shadowblur : 3;
+			var color = param.shadow === true ? 0 : +param.shadow;
+			var opacity = param.shadowopacity !== void ? +param.shadowopacity : 200;
+			layer.doDropShadow(dx, dy, blur, color, opacity);
+		}
+		layer.face = orgface;
+		layer.holdAlpha = orgholdlpha;
 	}
 
 	property interrupted
@@ -844,6 +915,7 @@ class AnimationLayer extends KAGLayer
 		for(var i = src_animseg_count-1; i>=0; i--)
 		{
 			var seg = srcanimseg[i];
+			animseg[i] = void;
 			if(seg !== void)
 			{
 				animseg[i] = new AnimationConductor(this);
@@ -857,7 +929,7 @@ class AnimationLayer extends KAGLayer
 		// その他
 		Anim_interrupted = src.Anim_interrupted;
 		Anim_storageName = src.Anim_storageName;
-}
+	}
 
 	function store()
 	{
@@ -945,10 +1017,11 @@ class AnimationLayer extends KAGLayer
 			{
 				var o = src[i];
 				var tagname = o.tagname;
-				if(tagname == "pimage")
-					loadPartialImage(o);
-				else if(tagname == "ptext")
-					drawReconstructibleText(o);
+				dm(tagname);
+				var handler = global.AnimationLayer.Anim_reconstructHandlers[tagname];
+				dm(handler);
+				if(handler !== void)
+					(handler incontextof this)(o);
 			}
 		}
 		else
@@ -1042,8 +1115,9 @@ class AnimationLayer extends KAGLayer
 			sx = cl.imageWidth - sx - sw;
 		}
 
-		face = dfBoth;
+		face = dfAuto;
 		copyRect(dx, dy, cl, sx, sy, sw, sh);
+
 		return 0;
 	}
 
@@ -1082,12 +1156,20 @@ class AnimationLayer extends KAGLayer
 
 	/*タグハンドラ*/function eval(elm)
 	{
-		elm.exp!; // elm.exp を式として実行
+		Scripts.eval(elm.exp); // elm.exp を式として実行
 		return 0;
 	}
-
-
 }
+
+
+// pimage, ptext タグのように、栞の読み込み時に再構築
+// 可能な情報を復元する際に用いるハンドラ
+// (タグ名と、それに対応するハンドラを記述する)
+AnimationLayer.Anim_reconstructHandlers =
+	%[
+		pimage	:	AnimationLayer.loadPartialImage,
+		ptext	:	AnimationLayer.drawReconstructibleText
+	];
 
 
 class ClickGlyphLayer extends AnimationLayer
